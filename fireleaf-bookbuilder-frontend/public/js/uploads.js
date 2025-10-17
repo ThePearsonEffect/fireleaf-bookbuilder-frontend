@@ -1,0 +1,19 @@
+import { Api } from './api.js';
+export async function uploadFile(file, onProgress = () => {}) {
+  const { storage, ref, uploadBytesResumable, getDownloadURL, auth } = window.$firebase;
+  const uid = auth.currentUser?.uid || "anon";
+  const path = `uploads/${uid}/${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, path);
+  const task = uploadBytesResumable(storageRef, file);
+
+  return new Promise((resolve, reject) => {
+    task.on("state_changed", (snap) => {
+      const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+      onProgress(pct);
+    }, reject, async () => {
+      const url = await getDownloadURL(task.snapshot.ref);
+      resolve({ path, url });
+    });
+  });
+}
+

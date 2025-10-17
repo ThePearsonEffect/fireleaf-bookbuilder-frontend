@@ -1,0 +1,211 @@
+/* === Core Panel Styles === */
+.brain-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 100%;
+  background: #fff;
+  border-left: 1px solid #e5e7eb;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.06);
+  padding: 16px;
+  z-index: 9999;
+  overflow: auto;
+}
+
+.brain-panel.d-none { display: none; }
+
+.brain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.brain-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.brain-out {
+  background: #0b1020;
+  color: #eaf2ff;
+  padding: 12px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+
+.icon-btn {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.primary {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.secondary {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+/* === Download Spinner + Progress Bar === */
+.download-status {
+  display: none;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  opacity: 0;
+}
+
+.download-status.active {
+  display: flex;
+  animation: fadeIn 160ms ease-out forwards;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #e5e7eb;
+  border-top-color: #2563eb;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.progress-wrap {
+  width: 180px;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #2563eb;
+  transition: width 0.12s linear;
+}
+
+.progress-label {
+  font-size: 12px;
+  color: #374151;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* === Animations === */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+  .download-status.active { animation: none; opacity: 1; }
+  .progress-bar { transition: none; }
+}
+
+/* === Dark Mode Variant === */
+@media (prefers-color-scheme: dark) {
+  .brain-panel {
+    background: #0b1020;
+    color: #eaf2ff;
+    border-left: 1px solid #374151;
+  }
+
+  .icon-btn {
+    background: #1f2937;
+    border: 1px solid #374151;
+    color: #eaf2ff;
+  }
+
+  .secondary {
+    background: #1f2937;
+    border: 1px solid #374151;
+    color: #eaf2ff;
+  }
+
+  .download-status { color: #eaf2ff; }
+
+  .spinner {
+    border: 2px solid #374151;
+    border-top-color: #60a5fa;
+  }
+
+  .progress-wrap { background: #374151; }
+
+  .progress-bar { background: #60a5fa; }
+
+  .progress-label { color: #eaf2ff; }
+}
+
+/* === Toasts === */
+#toastContainer {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 99999;
+}
+
+.toast {
+  min-width: 240px;
+  max-width: 420px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: #0b1020;
+  background: #eaf2ff;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  border-left: 6px solid #2563eb;
+  font-size: 14px;
+  line-height: 1.35;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: toast-in .18s ease-out forwards;
+}
+
+.toast--success { background:#eafbf3; border-left-color:#10b981; }
+.toast--error   { background:#fdecec; border-left-color:#ef4444; }
+
+.toast__title { font-weight: 700; margin-bottom: 4px; color:#111827; }
+.toast__msg   { color:#1f2937; }
+
+.toast__close {
+  position:absolute;
+  top:6px; right:10px;
+  background: transparent;
+  border: 0; cursor: pointer;
+  font-size: 16px; color:#374151;
+}
+
+@keyframes toast-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(8px); }
+}
+
+/* === Disabled Button Styles === */
+button[disabled],
+.button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}

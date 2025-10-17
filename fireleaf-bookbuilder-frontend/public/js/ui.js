@@ -1,0 +1,138 @@
+import { Api } from './api.js';
+// public/js/ui.js
+import { apiGet, apiPost } from "./api.js";
+import { CONFIG } from './config.js';
+
+class UIManager {
+  constructor() {
+    this.progressBar = null;
+    this.loadingOverlay = null;
+    this.loadingText = null;
+    this.currentStep = 0;
+    this.totalSteps = 0;
+
+    this.initializeElements();
+    this.setupEventListeners();
+  }
+
+  initializeElements() {
+    this.progressBar = document.getElementById('progress-bar');
+    this.loadingOverlay = document.getElementById('loading-overlay');
+    this.loadingText = document.getElementById('loading-text');
+    this.alertContainer = document.getElementById('alert-container');
+    this.liveWriterArea = document.getElementById('live-writer');
+  }
+
+  setupEventListeners() {
+    // Existing UI setup
+    this.setupCustomSelects();
+    this.setupFormValidation();
+    this.setupModalHandlers();
+
+    // ✅ Added: Brain status check button event
+    const checkBrainBtn = document.getElementById("checkBrain");
+    if (checkBrainBtn) {
+      checkBrainBtn.addEventListener("click", async () => {
+        try {
+          const res = await apiGet("brain/status");
+          console.log("Brain Status:", res);
+          this.showAlert("Brain is online ✅", "success");
+        } catch (err) {
+          console.error(err);
+          this.showAlert("Failed to reach the brain ❌", "error");
+        }
+      });
+    }
+  }
+
+  setupCustomSelects() {
+    const bookLengthSelect = document.getElementById('book-length');
+    const customLengthInput = document.getElementById('custom-length');
+
+    bookLengthSelect?.addEventListener('change', (e) => {
+      if (e.target.value === 'custom') {
+        customLengthInput.classList.remove('d-none');
+        customLengthInput.required = true;
+      } else {
+        customLengthInput.classList.add('d-none');
+        customLengthInput.required = false;
+      }
+    });
+
+    const genreSelect = document.getElementById('genre');
+    const customGenreInput = document.getElementById('custom-genre');
+
+    genreSelect?.addEventListener('change', (e) => {
+      if (e.target.value === 'custom') {
+        customGenreInput.classList.remove('d-none');
+        customGenreInput.required = true;
+      } else {
+        customGenreInput.classList.add('d-none');
+        customGenreInput.required = false;
+      }
+    });
+  }
+
+  setupFormValidation() {
+    const form = document.getElementById('book-form');
+    form?.addEventListener('input', () => {
+      this.validateForm();
+    });
+  }
+
+  setupModalHandlers() {
+    const apiKeyModal = document.getElementById('apiKeyModal');
+    const apiKeyInput = document.getElementById('api-key-input');
+
+    apiKeyModal?.addEventListener('shown.bs.modal', () => {
+      apiKeyInput?.focus();
+    });
+  }
+
+  validateForm() {
+    const form = document.getElementById('book-form');
+    if (!form) return;
+  }
+
+  showAlert(message, type = 'info', dismissible = true, timeout = 5000) {
+    if (!this.alertContainer) return;
+
+    const bsType = type === 'error' ? 'danger' : type;
+    const alertId = `alert-${Date.now()}`;
+    const alertHTML = `
+      <div id="${alertId}" class="alert alert-${bsType} ${dismissible ? 'alert-dismissible' : ''} fade show" role="alert">
+        <i class="fas fa-${this.getAlertIcon(type)} me-2"></i>
+        ${message}
+        ${dismissible ? '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' : ''}
+      </div>
+    `;
+
+    this.alertContainer.insertAdjacentHTML('beforeend', alertHTML);
+
+    if (timeout > 0) {
+      setTimeout(() => {
+        const alertElement = document.getElementById(alertId);
+        if (alertElement) {
+          const bsAlert = new bootstrap.Alert(alertElement);
+          bsAlert.close();
+        }
+      }, timeout);
+    }
+
+    return alertId;
+  }
+
+  getAlertIcon(type) {
+    const icons = {
+      success: 'check-circle',
+      error: 'exclamation-triangle',
+      warning: 'exclamation-circle',
+      info: 'info-circle'
+    };
+    return icons[type] || 'info-circle';
+  }
+}
+
+export const uiManager = new UIManager();
+export const showAlert = (message, type, dismissible, timeout) => uiManager.showAlert(message, type, dismissible, timeout);
+

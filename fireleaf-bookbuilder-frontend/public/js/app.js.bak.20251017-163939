@@ -1,0 +1,327 @@
+// ==============================
+// 🔥 Module Imports
+// ==============================
+import '../components/Tabs.js';
+
+import './config.js';
+import './firebase.js';   // safe stub or your real firebase client
+import './api.js';
+import './ui.js';
+import './uploads.js';
+import './storage.js';
+import './export.js';
+import './toast.js';
+import './brain.js';
+
+// ==============================
+// 📥 Download Queue Import
+// ==============================
+import { enqueueDownload } from './export.js';
+
+// ==============================
+// 📄 Main Application Logic
+// ==============================
+document.addEventListener('DOMContentLoaded', () => {
+  const fileInput      = document.getElementById('fileInput');
+  const uploadProgress = document.getElementById('uploadProgress');
+  const ingestBtn      = document.getElementById('ingestBtn');
+  const pasteArea      = document.getElementById('pasteArea');
+  const sourceText     = document.getElementById('sourceText');
+
+  const btnDocx = document.getElementById('btnExportDocx') || document.getElementById('exportDocx');
+  const btnEpub = document.getElementById('btnExportEpub') || document.getElementById('exportEpub');
+
+  const ingestMsgEl = document.getElementById('ingestResults');
+  function showIngestMessage(kind, msg) {
+    if (!ingestMsgEl) {
+      console[kind === 'danger' ? 'error' : 'log']('[Ingest]', msg);
+      return;
+    }
+    const cls =
+      kind === 'success'
+        ? 'alert-success'
+        : kind === 'warning'
+        ? 'alert-warning'
+        : 'alert-danger';
+    ingestMsgEl.innerHTML = `
+      <div class="alert ${cls} d-flex align-items-start" role="alert" style="white-space:pre-wrap">
+        <i class="fas ${
+          kind === 'success'
+            ? 'fa-check-circle'
+            : kind === 'warning'
+            ? 'fa-exclamation-triangle'
+            : 'fa-times-circle'
+        } me-2"></i>
+        <div>${msg}</div>
+      </div>`;
+  }
+
+  let lastUploaded = null;
+
+  // 📤 (A) Upload
+  if (fileInput) {
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      if (uploadProgress) uploadProgress.textContent = '0%';
+
+      const { url } = await uploadFile(
+        file,
+        (p) => uploadProgress && (uploadProgress.textContent = p + '%')
+      );
+      lastUploaded = { url, name: file.name };
+
+      document.dispatchEvent(new CustomEvent('brain:uploaded'));
+    });
+  }
+
+  // 📝 (B) Live paste updates
+  if (pasteArea) {
+    pasteArea.addEventListener('input', () => {
+      window.currentSourceText = pasteArea.value;
+      document.dispatchEvent(new CustomEvent('brain:source-updated'));
+    });
+  }
+
+  // 🧠 (C) Ingest
+  if (ingestBtn) {
+    ingestBtn.addEventListener('click', async () => {
+      const pasted = (pasteArea?.value || '').trim();
+      if (pasted) {
+        window.currentSourceText = pasted;
+        if (sourceText) sourceText.value = pasted;
+        showIngestMessage(
+          'success',
+          `Pasted text loaded (${pasted.length.toLocaleString()} characters).`
+        );
+        document.dispatchEvent(new CustomEvent('brain:source-updated'));
+        return;
+      }
+
+      if (!lastUploaded?.url) {
+        showIngestMessage(
+          'warning',
+          'Please upload a DOCX/PDF first or paste text on the right.'
+        );
+        return;
+      }
+
+      ingestBtn.disabled = true;
+      const originalLabel = ingestBtn.textContent;
+      ingestBtn.textContent = 'Ingesting…';
+
+      try {
+        const r = await fetch('/api/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: lastUploaded.url,
+            filename: lastUploaded.name
+          })
+        });
+
+        let data;
+        try {
+          data = await r.json();
+        } catch {
+          data = null;
+        }
+
+        if (!r.ok) {
+          const reason = data?.error
+            ? typeof data.error === 'string'
+              ? data.error
+              : JSON.stringify(data.error)
+            : `HTTP ${r.status}`;
+          throw new Error(`Ingest failed: ${reason}`);
+        }
+
+        window.currentSourceText = data?.text || '';
+        const sourceEl = document.getElementById('sourceText');
+        if (sourceEl) sourceEl.value = window.currentSourceText;
+
+        document.dispatchEvent(new CustomEvent('brain:ingested'));
+        document.dispatchEvent(new CustomEvent('brain:source-updated'));
+
+        const stats = data?.meta
+          ? `(${(data.meta.type || 'unknown').toUpperCase()} • ${Number(
+              data.meta.bytes || 0
+            ).toLocaleString()} bytes${
+              data.meta.pages ? ` • ${data.meta.pages} pages` : ''
+            })`
+          : '';
+        showIngestMessage(
+          'success',
+          `Ingest complete. Extracted ${window.currentSourceText.length.toLocaleString()} characters ${stats}.`
+        );
+      } catch (e) {
+        console.error(e);
+        showIngestMessage(
+          'danger',
+          `Unable to ingest file.\n${e?.message || e}\n\nTips:\n• Ensure /api/ingest is deployed and reachable.\n• For PDFs, install "pdf-parse".\n• For DOCX, install "mammoth".`
+        );
+      } finally {
+        ingestBtn.disabled = false;
+        ingestBtn.textContent = originalLabel || 'Ingest Content';
+      }
+    });
+  }
+
+  // ✍️ Build manuscript object
+  function buildManuscript() {
+    const title = (document.getElementById('bookTitle')?.value || 'Untitled').trim();
+    const author = (document.getElementById('authorName')?.value || 'Anonymous').trim();
+    const subtitle = (document.getElementById('bookSubtitle')?.value || '').trim();
+    const raw = window.currentSourceText || '';
+    const chapters = raw
+      ? raw.split(/\n\s*\n\s*\n+/).map((chunk, i) => ({
+          title: `Chapter ${i + 1}`,
+          content: chunk.trim()
+        }))
+      : [];
+    return { title, author, subtitle, chapters };
+  }
+  window.buildManuscript = buildManuscript;
+
+  // 📤 (D) Export DOCX
+  if (btnDocx) {
+    btnDocx.addEventListener('click', () => {
+      const title = (document.getElementById('bookTitle')?.value || 'book').replace(
+        /[^\w\-]+/g,
+        '_'
+      );
+      enqueueDownload({
+        apiPath: '/api/export-docx',
+        fileName: `${title}.docx`,
+        button: btnDocx
+      });
+    });
+  }
+
+  // 📤 (E) Export EPUB
+  if (btnEpub) {
+    btnEpub.addEventListener('click', () => {
+      const title = (document.getElementById('bookTitle')?.value || 'book').replace(
+        /[^\w\-]+/g,
+        '_'
+      );
+      enqueueDownload({
+        apiPath: '/api/export-epub',
+        fileName: `${title}.epub`,
+        button: btnEpub
+      });
+    });
+  }
+});
+
+// ==============================
+// 🧠 Manual Brain Panel Wiring
+// ==============================
+(function () {
+  const btnOpen  = document.getElementById('brainBtn');
+  const panel    = document.getElementById('brainPanel');
+  const btnClose = document.getElementById('brainClose');
+  const btnRun   = document.getElementById('brainRun');
+  const btnCopy  = document.getElementById('brainCopy');
+  const selMode  = document.getElementById('brainMode');
+  const out      = document.getElementById('brainOut');
+
+  if (!btnOpen || !panel) return;
+
+  btnOpen.addEventListener('click', () => panel.classList.remove('d-none'));
+  btnClose.addEventListener('click', () => panel.classList.add('d-none'));
+
+  btnRun?.addEventListener('click', async () => {
+    try {
+      out.textContent = 'Thinking…';
+      const manuscript = buildManuscriptForBrain();
+      const prompt = makeBrainPrompt(selMode?.value || 'outline', manuscript);
+
+      const r = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, model: 'gpt-4o-mini', max_tokens: 2048 })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error || 'Brain request failed');
+
+      out.textContent = extractText(data);
+    } catch (e) {
+      console.error(e);
+      out.textContent = '⚠️ Brain error: ' + (e?.message || e);
+    }
+  });
+
+  btnCopy?.addEventListener('click', async () => {
+    const t = out?.textContent || '';
+    if (!t.trim()) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      btnCopy.textContent = 'Copied!';
+      setTimeout(() => (btnCopy.textContent = 'Copy to clipboard'), 1200);
+    } catch {
+      alert('Copy failed');
+    }
+  });
+
+  function buildManuscriptForBrain() {
+    const title = document.getElementById('bookTitle')?.value?.trim() || '';
+    const subtitle = document.getElementById('bookSubtitle')?.value?.trim() || '';
+    const author = document.getElementById('authorName')?.value?.trim() || '';
+    const desc = document.getElementById('shortDescription')?.value?.trim() || '';
+    const source =
+      window.currentSourceText ||
+      document.getElementById('sourceText')?.value ||
+      '';
+    return { title, subtitle, author, description: desc, source };
+  }
+
+  function makeBrainPrompt(mode, m) {
+    const base = `You are an expert book development coach. Use the user's notes and details to help structure a compelling non-fiction or fiction book. Keep it crisp and usable in a text editor.`;
+
+    if (mode === 'chapter-titles') {
+      return `${base}
+INPUT:
+Title: ${m.title || 'Untitled'}
+Subtitle: ${m.subtitle || ''}
+Author: ${m.author || ''}
+Description: ${m.description || ''}
+Notes/Source (raw): ${m.source?.slice(0, 4000) || ''}
+
+TASK:
+Propose 12-18 chapter titles that follow a logical arc.
+Return as a numbered list only.`;
+    }
+
+    if (mode === 'improve-synopsis') {
+      return `${base}
+INPUT:
+Title: ${m.title || 'Untitled'}
+Subtitle: ${m.subtitle || ''}
+Author: ${m.author || ''}
+Current synopsis: ${m.description || ''}
+
+TASK:
+Rewrite the synopsis in 150-250 words. Include the reader promise, voice, and who this is for. Return plain text.`;
+    }
+
+    return `${base}
+INPUT:
+Title: ${m.title || 'Untitled'}
+Subtitle: ${m.subtitle || ''}
+Author: ${m.author || ''}
+Notes/Source (raw): ${m.source?.slice(0, 4000) || ''}
+
+TASK:
+Create a clean outline: Part > Chapter > 3-5 bullets each. Use markdown-style headings (## Part, ### Chapter) and bullet points (-).`;
+  }
+
+  function extractText(resp) {
+    if (resp?.output_text) return resp.output_text;
+    try {
+      const t = resp?.output?.[0]?.content?.[0]?.text;
+      if (typeof t === 'string' && t.trim()) return t;
+    } catch {}
+    return typeof resp === 'string' ? resp : JSON.stringify(resp, null, 2);
+  }
+})();
